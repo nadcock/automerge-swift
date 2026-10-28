@@ -29,38 +29,52 @@ enum CursorEncoding {
         var reader = ByteReader(bytes)
         guard let version = reader.byte() else { return nil }
         switch version {
-        case 0:
+        case 0: return versionZeroString(&reader)
+        case version1: return versionOneString(&reader)
+        default: return nil
+        }
+    }
+
+    /// Version 0: actor length, actor, counter; always "move after".
+    private static func versionZeroString(_ reader: inout ByteReader) -> String? {
+        guard let length = reader.uleb128(), let actor = reader.bytes(count: length),
+              let counter = reader.uleb128(), reader.isAtEnd
+        else { return nil }
+        return opString(counter: counter, actor: actor, before: false)
+    }
+
+    /// Version 1: a start, end, or op tag; op cursors carry actor, counter, and move.
+    private static func versionOneString(_ reader: inout ByteReader) -> String? {
+        guard let tag = reader.byte() else { return nil }
+        switch tag {
+        case startTag: return reader.isAtEnd ? "s" : nil
+        case endTag: return reader.isAtEnd ? "e" : nil
+        case opTag:
             guard let length = reader.uleb128(), let actor = reader.bytes(count: length),
-                  let counter = reader.uleb128(), reader.isAtEnd
+                  let counter = reader.uleb128(), let move = reader.byte(), reader.isAtEnd,
+                  move == moveBefore || move == moveAfter
             else { return nil }
-            return opString(counter: counter, actor: actor, before: false)
-        case version1:
-            guard let tag = reader.byte() else { return nil }
-            switch tag {
-            case startTag: return reader.isAtEnd ? "s" : nil
-            case endTag: return reader.isAtEnd ? "e" : nil
-            case opTag:
-                guard let length = reader.uleb128(), let actor = reader.bytes(count: length),
-                      let counter = reader.uleb128(), let move = reader.byte(), reader.isAtEnd,
-                      move == moveBefore || move == moveAfter
-                else { return nil }
-                return opString(counter: counter, actor: actor, before: move == moveBefore)
-            default: return nil
-            }
+            return opString(counter: counter, actor: actor, before: move == moveBefore)
         default: return nil
         }
     }
 
     /// Returns version 1 cursor bytes for a cursor string, or nil if the string is not a valid cursor.
     static func bytes(fromString string: String) -> [UInt8]? {
-        if string == "s" { return [version1, startTag] }
-        if string == "e" { return [version1, endTag] }
+        if string == "s" {
+            return [version1, startTag]
+        }
+        if string == "e" {
+            return [version1, endTag]
+        }
         var rest = Substring(string)
         let before = rest.hasPrefix("-")
-        if before { rest = rest.dropFirst() }
-        guard let at = rest.firstIndex(of: "@") else { return nil }
-        let counterText = rest[..<at]
-        let actorText = rest[rest.index(after: at)...]
+        if before {
+            rest = rest.dropFirst()
+        }
+        guard let separator = rest.firstIndex(of: "@") else { return nil }
+        let counterText = rest[..<separator]
+        let actorText = rest[rest.index(after: separator)...]
         guard !counterText.isEmpty, counterText.allSatisfy({ $0.isASCII && $0.isNumber }),
               let counter = UInt64(counterText), let actor = hexBytes(actorText), !actor.isEmpty
         else { return nil }
@@ -106,7 +120,9 @@ enum CursorEncoding {
         repeat {
             var byte = UInt8(remaining & 0x7F)
             remaining >>= 7
-            if remaining != 0 { byte |= 0x80 }
+            if remaining != 0 {
+                byte |= 0x80
+            }
             bytes.append(byte)
         } while remaining != 0
     }
@@ -120,7 +136,9 @@ private struct ByteReader {
         self.bytes = bytes
     }
 
-    var isAtEnd: Bool { offset == bytes.count }
+    var isAtEnd: Bool {
+        offset == bytes.count
+    }
 
     mutating func byte() -> UInt8? {
         guard offset < bytes.count else { return nil }
@@ -141,11 +159,17 @@ private struct ByteReader {
         var shift: UInt64 = 0
         while let byte = byte() {
             let payload = UInt64(byte & 0x7F)
-            if shift == 63, payload > 1 { return nil }
+            if shift == 63, payload > 1 {
+                return nil
+            }
             result |= payload << shift
-            if byte & 0x80 == 0 { return result }
+            if byte & 0x80 == 0 {
+                return result
+            }
             shift += 7
-            if shift > 63 { return nil }
+            if shift > 63 {
+                return nil
+            }
         }
         return nil
     }

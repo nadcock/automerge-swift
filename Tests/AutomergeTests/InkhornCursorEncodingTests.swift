@@ -4,7 +4,7 @@ import XCTest
 
 /// INKHORN: cursor persistence and the JavaScript string form, checked against the 0.7.2 FFI binary.
 final class InkhornCursorEncodingTests: XCTestCase {
-    // A fixed actor, so expected strings and bytes are stable.
+    /// A fixed actor, so expected strings and bytes are stable.
     let actorHex = "726806b9f076b82bc022caae3027090d"
 
     func makeDocument(_ value: String = "Hello world") throws -> (Document, ObjId) {
@@ -19,7 +19,7 @@ final class InkhornCursorEncodingTests: XCTestCase {
         let (doc, text) = try makeDocument()
         let cursor = try doc.cursor(obj: text, position: 6)
         // Bytes observed from the 0.7.2 binary, and the string Automerge JS 3.5.0 returns for the
-        // same actor, document, and position (Phase 1 probe).
+        // same actor, document, and position.
         XCTAssertEqual(cursor.description, "010310726806B9F076B82BC022CAAE3027090D0802")
         XCTAssertEqual(cursor.stringValue, "8@\(actorHex)")
     }

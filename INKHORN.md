@@ -1,6 +1,6 @@
 # Inkhorn fork of automerge-swift
 
-This branch (`inkhorn`) is Inkhorn's fork of automerge-swift, based on the **0.7.2** release, as decided in Inkhorn's ADR 0001. It uses the official 0.7.2 release XCFramework (same URL and checksum as upstream), so it contains no Rust changes.
+This branch (`inkhorn`) is Inkhorn's fork of automerge-swift, based on the **0.7.2** release. It uses the official 0.7.2 release XCFramework (same URL and checksum as upstream), so it contains no Rust changes.
 
 ## What it adds
 
@@ -17,4 +17,4 @@ Tags are `0.7.2-inkhorn.N`. Inkhorn pins an exact tag.
 
 ## Upstream
 
-The equivalent upstream work is automerge/automerge-swift#249 (blocks and spans), #250 (load with text encoding), and a planned cursor persistence PR. The fork is dropped once upstream releases them.
+The equivalent upstream work is automerge/automerge-swift#249 (blocks and spans), #250 (load with text encoding), plus cursor persistence. The fork is dropped once upstream releases equivalents.

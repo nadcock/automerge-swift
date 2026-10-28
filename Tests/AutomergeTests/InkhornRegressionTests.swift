@@ -2,7 +2,7 @@ import Automerge
 import Foundation
 import Testing
 
-// INKHORN regression suite: the Inkhorn Spike 1 behavior tests (blocks, marks, cursors, fork and
+// INKHORN regression suite: behavior tests for blocks, marks, cursors, fork and
 // merge, history, save and load), kept so the fork notices any behavior change on rebase.
 
 private func makeTextDoc(_ initial: String = "", encoding: TextEncoding = .utf16) throws -> (Document, ObjId) {
@@ -31,8 +31,8 @@ struct InkhornMarkTests {
         try doc.mark(obj: text, start: 0, end: 5, expand: .after, name: "bold", value: .Boolean(true))
         try doc.mark(obj: text, start: 6, end: 11, expand: .none, name: "link", value: .String("https://example.com"))
         // Type at the end of each marked range.
-        try doc.spliceText(obj: text, start: 5, delete: 0, value: "X")   // "HelloX world"
-        try doc.spliceText(obj: text, start: 12, delete: 0, value: "Y")  // "HelloX worldY"
+        try doc.spliceText(obj: text, start: 5, delete: 0, value: "X") // "HelloX world"
+        try doc.spliceText(obj: text, start: 12, delete: 0, value: "Y") // "HelloX worldY"
         let marks = try doc.marks(obj: text)
         let bold = try #require(marks.first { $0.name == "bold" })
         let link = try #require(marks.first { $0.name == "link" })
@@ -57,8 +57,14 @@ struct InkhornMarkTests {
     func structuredMarkValues() throws {
         let (doc, text) = try makeTextDoc("see chapter")
         // Marks take ScalarValue only. Structured values (link {url}, footnote {footnoteId}) must be encoded.
-        try doc.mark(obj: text, start: 4, end: 11, expand: .none, name: "internalLink",
-                     value: .String(#"{"nodeId":"0192f0c0-0000-7000-8000-000000000001"}"#))
+        try doc.mark(
+            obj: text,
+            start: 4,
+            end: 11,
+            expand: .none,
+            name: "internalLink",
+            value: .String(#"{"nodeId":"0192f0c0-0000-7000-8000-000000000001"}"#)
+        )
         let mark = try #require(try doc.marks(obj: text).first)
         guard case let .String(json) = mark.value else { throw InkhornTestError.unexpected("value") }
         #expect(json.contains("nodeId"))
@@ -69,13 +75,19 @@ struct InkhornMarkTests {
 struct InkhornBlockTests {
     /// The public Swift API has no splitBlock. Insert a map object into the text sequence instead,
     /// using the same shape automerge JS uses for block markers: { type, parents, attrs }.
-    static func insertBlock(_ doc: Document, _ text: ObjId, at index: UInt64, type: String,
-                            parents: [String] = [], attrs: [String: ScalarValue] = [:]) throws -> ObjId {
+    static func insertBlock(
+        _ doc: Document,
+        _ text: ObjId,
+        at index: UInt64,
+        type: String,
+        parents: [String] = [],
+        attrs: [String: ScalarValue] = [:]
+    ) throws -> ObjId {
         // insertObject(.Map) into Text throws WrongObjectType in 0.7.2; splitBlock comes from the Inkhorn patch.
         let block = try doc.splitBlock(obj: text, index: index)
         try doc.put(obj: block, key: "type", value: .String(type))
         let parentList = try doc.putObject(obj: block, key: "parents", ty: .List)
-        // Matches the JS block shape { type, parents, attrs, isEmbed }; verified against JS in Spike 4.
+        // Matches the JS block shape { type, parents, attrs, isEmbed }; verified against Automerge JS.
         try doc.put(obj: block, key: "isEmbed", value: .Boolean(false))
         for (i, parent) in parents.enumerated() {
             try doc.insert(obj: parentList, index: UInt64(i), value: .String(parent))
@@ -103,7 +115,7 @@ struct InkhornBlockTests {
             throw InkhornTestError.unexpected("block at 0 was \(String(describing: first))")
         }
         #expect(try doc.get(obj: blockId, key: "type") == .Scalar(.String("heading1")))
-        let scalars = rendered.unicodeScalars.map { $0.value }
+        let scalars = rendered.unicodeScalars.map(\.value)
     }
 
     @Test("Blocks survive save and load, and are visible in historical views")
@@ -140,7 +152,7 @@ struct InkhornCursorTests {
         let (doc, text) = try makeTextDoc("The quick brown fox")
         let cursor = try doc.cursor(obj: text, position: 10) // before "brown"
         let remote = doc.fork()
-        try remote.spliceText(obj: text, start: 0, delete: 4, value: "A very ")  // "A very quick brown fox"
+        try remote.spliceText(obj: text, start: 0, delete: 4, value: "A very ") // "A very quick brown fox"
         try doc.merge(other: remote)
         let pos = try doc.position(obj: text, cursor: cursor)
         let current = try doc.text(obj: text)
@@ -151,7 +163,7 @@ struct InkhornCursorTests {
     func cursorEncoding() throws {
         let (doc, text) = try makeTextDoc("abcdef")
         let cursor = try doc.cursor(obj: text, position: 3)
-                let stored = cursor.bytes
+        let stored = cursor.bytes
         let loaded = try Document(doc.save())
         let decoded = try Cursor(bytes: stored)
         let loadedText = try textId(loaded)
@@ -173,24 +185,24 @@ struct InkhornForkMergeTests {
     @Test("Concurrent edits on forks merge without loss")
     func concurrentEdits() throws {
         let (doc, text) = try makeTextDoc("Middle")
-        let a = doc.fork()
-        let b = doc.fork()
-        try a.spliceText(obj: text, start: 0, delete: 0, value: "Start ")
-        try a.mark(obj: text, start: 0, end: 5, expand: .after, name: "bold", value: .Boolean(true))
-        try b.spliceText(obj: text, start: 6, delete: 0, value: " End")
-        try a.merge(other: b)
-        try b.merge(other: a)
-        #expect(try a.text(obj: text) == "Start Middle End")
-        #expect(a.heads() == b.heads())
-        #expect(try a.marks(obj: text) == b.marks(obj: text))
+        let left = doc.fork()
+        let right = doc.fork()
+        try left.spliceText(obj: text, start: 0, delete: 0, value: "Start ")
+        try left.mark(obj: text, start: 0, end: 5, expand: .after, name: "bold", value: .Boolean(true))
+        try right.spliceText(obj: text, start: 6, delete: 0, value: " End")
+        try left.merge(other: right)
+        try right.merge(other: left)
+        #expect(try left.text(obj: text) == "Start Middle End")
+        #expect(left.heads() == right.heads())
+        #expect(try left.marks(obj: text) == right.marks(obj: text))
     }
 
     @Test("forkAt(heads) produces a historical branch (suggestion fork base)")
     func forkAtHeads() throws {
         let (doc, text) = try makeTextDoc("v1")
-        let v1 = doc.heads()
+        let firstHeads = doc.heads()
         try doc.spliceText(obj: text, start: 2, delete: 0, value: " v2")
-        let fork = try doc.forkAt(heads: v1)
+        let fork = try doc.forkAt(heads: firstHeads)
         #expect(try fork.text(obj: text) == "v1")
         try fork.spliceText(obj: text, start: 0, delete: 0, value: "suggested ")
         try doc.merge(other: fork)
@@ -223,19 +235,19 @@ struct InkhornHistoryTests {
         let (doc, text) = try makeTextDoc()
         try doc.spliceText(obj: text, start: 0, delete: 0, value: "First draft.")
         doc.commitWith(message: "session 1", timestamp: Date(timeIntervalSince1970: 1_700_000_000))
-        let h1 = doc.heads()
+        let sessionOneHeads = doc.heads()
         try doc.mark(obj: text, start: 0, end: 5, expand: .after, name: "bold", value: .Boolean(true))
         try doc.spliceText(obj: text, start: 0, delete: 12, value: "Second draft.")
         doc.commitWith(message: "session 2")
-        #expect(try doc.textAt(obj: text, heads: h1) == "First draft.")
-        #expect(try doc.marksAt(obj: text, heads: h1).isEmpty)
+        #expect(try doc.textAt(obj: text, heads: sessionOneHeads) == "First draft.")
+        #expect(try doc.marksAt(obj: text, heads: sessionOneHeads).isEmpty)
         let history = doc.getHistory()
         #expect(history.count >= 2)
-        let h1Hash = try #require(h1.first)
-        let first = try #require(doc.change(hash: h1Hash))
+        let sessionOneHash = try #require(sessionOneHeads.first)
+        let first = try #require(doc.change(hash: sessionOneHash))
         #expect(first.message == "session 1")
         #expect(first.timestamp == Date(timeIntervalSince1970: 1_700_000_000))
-        let diff = doc.difference(from: h1, to: doc.heads())
+        let diff = doc.difference(from: sessionOneHeads, to: doc.heads())
         #expect(!diff.isEmpty)
     }
 
@@ -243,10 +255,10 @@ struct InkhornHistoryTests {
     func restore() throws {
         let (doc, text) = try makeTextDoc("Original text")
         doc.commitWith(message: "v1")
-        let h1 = doc.heads()
+        let sessionOneHeads = doc.heads()
         try doc.spliceText(obj: text, start: 0, delete: 8, value: "Changed")
         doc.commitWith(message: "v2")
-        let old = try doc.textAt(obj: text, heads: h1)
+        let old = try doc.textAt(obj: text, heads: sessionOneHeads)
         try doc.updateText(obj: text, value: old)
         doc.commitWith(message: "restore v1")
         #expect(try doc.text(obj: text) == "Original text")
@@ -266,11 +278,11 @@ struct InkhornPersistenceTests {
         try doc.spliceText(obj: text, start: 0, delete: 0, value: ">> ")
         file.append(doc.encodeNewChanges())
         let loaded = try Document(file)
-        #expect(try loaded.text(obj: try textId(loaded)) == ">> Base plus more")
+        #expect(try loaded.text(obj: textId(loaded)) == ">> Base plus more")
         #expect(loaded.heads() == doc.heads())
     }
 
-    /// Inkhorn's store frames and checksums appended chunks because of this behavior (versioning.md 2.2).
+    /// Callers that append saved chunks to one file should frame and checksum them because of this behavior.
     @Test("Truncated trailing chunk makes load throw")
     func truncatedTail() throws {
         let (doc, text) = try makeTextDoc("Base")
@@ -289,7 +301,7 @@ struct InkhornPersistenceTests {
         let loaded = try Document(doc.save())
         // 0.7.2 gap (Inkhorn works around it below): loading forgets the UTF-16 encoding.
         #expect(loaded.textEncoding == .unicodeScalar)
-        let loadedLength = loaded.length(obj: try textId(loaded))
+        let loadedLength = try loaded.length(obj: textId(loaded))
         #expect(loadedLength == 4) // Unicode scalars: é, two regional indicators, x
         // Workaround A: apply saved bytes into a fresh utf16 document.
         let freshA = Document(textEncoding: .utf16)
@@ -297,7 +309,7 @@ struct InkhornPersistenceTests {
         // Workaround B: merge the loaded document into a fresh utf16 document.
         let freshB = Document(textEncoding: .utf16)
         try freshB.merge(other: loaded)
-        let lengthB = freshB.length(obj: try textId(freshB))
+        let lengthB = try freshB.length(obj: textId(freshB))
         #expect(freshB.textEncoding == .utf16)
         #expect(lengthB == 6)
         #expect(freshB.heads() == doc.heads())
