@@ -27,6 +27,16 @@ public final class Document: @unchecked Sendable {
         try work()
     }
     #endif
+
+    /// INKHORN: runs an FFI call under the document lock with change notifications, for the
+    /// Inkhorn extensions in `Document+Inkhorn.swift`, which cannot reach the private `doc`.
+    func inkhornLockedFFI<T>(_ body: (Doc) throws -> T) throws -> T {
+        try lock {
+            sendObjectWillChange()
+            defer { sendObjectDidChange() }
+            return try self.doc.wrapErrors { try body($0) }
+        }
+    }
     
     #if canImport(Combine)
     private let objectDidChangeSubject: PassthroughSubject<(), Never> = .init()
@@ -614,7 +624,7 @@ public final class Document: @unchecked Sendable {
         try lock {
             sendObjectWillChange()
             defer { sendObjectDidChange() }
-            return try Cursor(bytes: self.doc.wrapErrors { try $0.cursor(obj: obj.bytes, position: position) })
+            return try Cursor(validatedBytes: self.doc.wrapErrors { try $0.cursor(obj: obj.bytes, position: position) })
         }
     }
 
@@ -653,7 +663,7 @@ public final class Document: @unchecked Sendable {
         try lock {
             sendObjectWillChange()
             defer { sendObjectDidChange() }
-            return try Cursor(bytes: self.doc.wrapErrors { try $0.cursorAt(
+            return try Cursor(validatedBytes: self.doc.wrapErrors { try $0.cursorAt(
                 obj: obj.bytes,
                 position: position,
                 heads: heads.map(\.bytes)
